@@ -1,0 +1,7 @@
+# Common Python excludes
+**/.ipynb_checkpoints/
+**/__pycache__/
+
+# Folders containing artifacts
+data/
+output/

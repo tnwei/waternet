@@ -1,0 +1,16 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: "v4.0.1"
+    hooks:
+    -   id: check-ast
+    -   id: check-json
+    -   id: check-yaml
+-   repo: https://github.com/psf/black
+    rev: "21.9b0"
+    hooks:
+    -   id: black
+-   repo: https://github.com/jorisroovers/gitlint
+    rev: "v0.15.1" 
+    hooks:
+    -   id: gitlint
+        args: [--msg-filename]
