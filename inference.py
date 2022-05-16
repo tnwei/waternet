@@ -12,8 +12,8 @@ from waternet.net import WaterNet
 # Config ------
 
 wd = Path(__file__).parent.resolve()  # repo root
-runsdir = wd / "runs"
-default_ckpt_dir_relative = "assets/waternet-exported-state-dict.pt"
+outputdir = wd / "output"
+default_ckpt_dir_relative = "waternet-exported-state-dict.pt"
 default_ckpt_dir_absolute = wd / default_ckpt_dir_relative
 
 # Dropbox URLs just need dl=1 to ensure direct download link
@@ -49,16 +49,16 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--source",
     type=str,
-    help="Path to input image/video, any format works as long as OpenCV can open it",
+    help="Path to input image/video, any format works as long as OpenCV can open it.",
 )
 parser.add_argument(
     # Default not specified, so that this argument is blank if unspecified
     "--weights",
     type=str,
-    help=f"(Optional) Path to model weights, defaults to {default_ckpt_dir_relative}",
+    help=f"(Optional) Path to model weights, defaults to {default_ckpt_dir_relative}. Auto-downloads pretrained weights if not available.",
 )
 parser.add_argument(
-    "--name", type=str, help="(Optional) Subfolder name to save under ./runs"
+    "--name", type=str, help="(Optional) Subfolder name to save under `./output`."
 )
 args = parser.parse_args()
 
@@ -85,7 +85,7 @@ if args.weights is None:
             default_ckpt_url,
             progress=False,  # not a pbar but a percentage printout
             map_location=device,
-            model_dir=wd / "assets",
+            model_dir=wd,
         )
         # print(f"Pretrained weights saved to {weights_dir}") # Redundant
         model.load_state_dict(sd)
@@ -142,13 +142,13 @@ elif is_video is True:
 # Figure out savedir ------
 # Implemented towards the back, prevent runtime errors creating empty folders
 
-# Create runsdir if not exists
-if not runsdir.exists():
-    runsdir.mkdir()
+# Create outputdir if not exists
+if not outputdir.exists():
+    outputdir.mkdir()
 
 # Determine savedir if --name not provided
 if args.name is None:
-    numerical_subdirs = list(runsdir.glob("*"))
+    numerical_subdirs = list(outputdir.glob("*"))
 
     # isdecimal over isdigit and isnumeric
     # see: https://datagy.io/python-isdigit/
@@ -157,13 +157,13 @@ if args.name is None:
     ]
 
     if len(numerical_subdirs) == 0:
-        savedir = runsdir / "0"
+        savedir = outputdir / "0"
         savedir.mkdir()
     else:
-        savedir = runsdir / str(max(numerical_subdirs) + 1)
+        savedir = outputdir / str(max(numerical_subdirs) + 1)
         savedir.mkdir()
 else:
-    savedir = runsdir / args.name
+    savedir = outputdir / args.name
     if not savedir.exists():
         savedir.mkdir()
 
