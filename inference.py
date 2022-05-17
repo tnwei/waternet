@@ -190,10 +190,6 @@ for fdir in fdirs:
         if not savedir.exists():
             savedir.mkdir()
         cv2.imwrite(outpath, out_im)
-        np.save(
-            savedir / (fdir.stem + ".npy"),
-            out_im,
-        )
 
     elif fdir.suffix in VID_SUFFIXES:
         # Load as video
