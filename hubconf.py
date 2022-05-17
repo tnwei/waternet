@@ -32,7 +32,7 @@ def ten2arr_noeinops(ten):
     arr = np.clip(arr, 0, 1)
     arr = (arr * 255).astype(np.uint8)
     # arr = rearrange(arr, "n c h w -> n h w c")
-    arr = np.transpose(arr, (2, 0, 1))
+    arr = np.transpose(arr, (0, 3, 1, 2))
     return arr
 
 
