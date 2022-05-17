@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+import os
 
 import cv2
 import numpy as np
@@ -15,6 +16,8 @@ wd = Path(__file__).parent.resolve()  # repo root
 outputdir = wd / "output"
 default_ckpt_dir_relative = "waternet-exported-state-dict.pt"
 default_ckpt_dir_absolute = wd / default_ckpt_dir_relative
+VID_SUFFIXES = [".mp4", ".mpeg", ".avi"]
+IM_SUFFIXES = [".bmp", ".jpg", ".jpeg", ".png", ".gif"]
 
 # Dropbox URLs just need dl=1 to ensure direct download link
 default_ckpt_url = (
@@ -28,18 +31,27 @@ print(f"Using device: {device}")
 
 
 def arr2ten(arr):
-    """Convert arr2ten plus scaling"""
+    """Converts (N)HWC numpy array into torch Tensor:
+    1. Divide by 255
+    2. Rearrange dims: HWC -> 1CHW or NHWC -> NCHW
+    """
     ten = torch.from_numpy(arr) / 255
-    ten = rearrange(ten, "h w c -> 1 c h w")
+    if len(ten.shape) == 3:
+        ten = rearrange(ten, "h w c -> 1 c h w")
+    elif len(ten.shape) == 4:
+        ten = rearrange(ten, "n h w c -> n c h w")
     return ten
 
 
 def ten2arr(ten):
-    """Convert ten2arr plus scaling"""
+    """Convert NCHW torch Tensor into NHWC numpy array:
+    1. Multiply by 255, clip and change dtype to unsigned int
+    2. Rearrange dims: NCHW -> NHWC
+    """
     arr = ten.cpu().detach().numpy()
     arr = np.clip(arr, 0, 1)
     arr = (arr * 255).astype(np.uint8)
-    arr = rearrange(arr, "c h w -> h w c")
+    arr = rearrange(arr, "n c h w -> n h w c")
     return arr
 
 
@@ -49,7 +61,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--source",
     type=str,
-    help="Path to input image/video, any format works as long as OpenCV can open it.",
+    help="Path to input image/video/directory, supports image formats: bmp, jpg, jpeg, png, gif, and video formats: mp4, mpeg, avi",
 )
 parser.add_argument(
     # Default not specified, so that this argument is blank if unspecified
@@ -96,51 +108,24 @@ else:
         model.load_state_dict(torch.load(f, map_location=device))
 
 
-# Load source, figure out source type ------
+# Load source  ------
 
-assert Path(args.source).exists(), f"{args.source} does not exist!"
+source_fp = Path(args.source)
+assert source_fp.exists(), f"{args.source} does not exist!"
 
-if not Path(args.source).is_file():
-    raise ValueError(f"{args.source} is not a file, but a folder")
+if source_fp.is_dir():
+    fdirs = list(source_fp.glob("*"))
+    fdirs = [
+        i
+        for i in fdirs
+        if (i.suffix.lower() in VID_SUFFIXES) or (i.suffix.lower() in IM_SUFFIXES)
+    ]
 else:
-    im = cv2.imread(args.source)
+    fdirs = [source_fp]
 
-    if im is None:
-        is_video = True
-    else:
-        is_video = False
-
-    if is_video is True:
-        # Load as video
-        raise NotImplementedError("Video not implemented yet")
-    elif is_video is False:
-        # Load as image
-        im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-
-# Run preprocessing + inference on provided input ------
-if is_video is False:
-    wb, gc, he = transform(im)
-    rgb_ten = arr2ten(im)
-    wb_ten = arr2ten(wb)
-    gc_ten = arr2ten(gc)
-    he_ten = arr2ten(he)
-
-    with torch.no_grad():
-        rgb_ten = rgb_ten.to(device)
-        wb_ten = wb_ten.to(device)
-        gc_ten = gc_ten.to(device)
-        he_ten = he_ten.to(device)
-
-        # torch.Size([1, 3, H, W])
-        out = model(rgb_ten, wb_ten, he_ten, gc_ten)
-        out_im = ten2arr(out[0])
-        out_im = cv2.cvtColor(out_im, cv2.COLOR_RGB2BGR)
-
-elif is_video is True:
-    raise NotImplementedError("Video not implemented yet")
+print(f"Total images/videos: {len(fdirs)}")
 
 # Figure out savedir ------
-# Implemented towards the back, prevent runtime errors creating empty folders
 
 # Create outputdir if not exists
 if not outputdir.exists():
@@ -158,21 +143,52 @@ if args.name is None:
 
     if len(numerical_subdirs) == 0:
         savedir = outputdir / "0"
-        savedir.mkdir()
     else:
         savedir = outputdir / str(max(numerical_subdirs) + 1)
-        savedir.mkdir()
 else:
     savedir = outputdir / args.name
-    if not savedir.exists():
-        savedir.mkdir()
 
 
-# Save files
-if is_video is False:
-    og_filename = Path(args.source).name
-    outpath = (savedir / og_filename).as_posix()
-    cv2.imwrite(outpath, out_im)
-    print(f"Saved to {outpath}!")
-else:
-    raise NotImplementedError("Video not implemented yet")
+# Preprocessing / inference / saving ------
+for fdir in fdirs:
+    if fdir.suffix in IM_SUFFIXES:
+        # Load image
+        im = cv2.imread(os.fspath(fdir))  # OpenCV can't read pathlike-objects
+
+        if len(im.shape) == 3:
+            im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+        elif len(im.shape) == 4:
+            im = cv2.cvtColor(im, cv2.COLOR_BGRA2RGB)
+
+        # Preprocessing
+        wb, gc, he = transform(im)
+        rgb_ten = arr2ten(im)
+        wb_ten = arr2ten(wb)
+        gc_ten = arr2ten(gc)
+        he_ten = arr2ten(he)
+
+        # Inference + postprocessing
+        with torch.no_grad():
+            rgb_ten = rgb_ten.to(device)
+            wb_ten = wb_ten.to(device)
+            gc_ten = gc_ten.to(device)
+            he_ten = he_ten.to(device)
+
+            # torch.Size([1, 3, H, W])
+            out = model(rgb_ten, wb_ten, he_ten, gc_ten)
+            out_im = ten2arr(out)[0]
+            out_im = cv2.cvtColor(out_im, cv2.COLOR_RGB2BGR)
+
+        outpath = os.fspath(savedir / fdir.name)
+
+        # Savedir exists check as late as possible
+        # so early errors don't create empty savedirs
+        if not savedir.exists():
+            savedir.mkdir()
+        cv2.imwrite(outpath, out_im)
+
+    elif fdir.suffix in VID_SUFFIXES:
+        # Load as video
+        raise NotImplementedError("Video not implemented yet")
+
+print(f"Saved output to {savedir}!")
