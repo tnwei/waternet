@@ -100,12 +100,17 @@ if args.weights is None:
         )
         # print(f"Pretrained weights saved to {weights_dir}") # Redundant
         model.load_state_dict(sd)
+    else:
+        with open(weights_dir, "rb") as f:
+            model.load_state_dict(torch.load(f, map_location=device))
+
 else:
     weights_dir = args.weights
 
     with open(weights_dir, "rb") as f:
         model.load_state_dict(torch.load(f, map_location=device))
 
+model.eval()
 
 # Load source  ------
 
@@ -185,6 +190,10 @@ for fdir in fdirs:
         if not savedir.exists():
             savedir.mkdir()
         cv2.imwrite(outpath, out_im)
+        np.save(
+            savedir / (fdir.stem + ".npy"),
+            out_im,
+        )
 
     elif fdir.suffix in VID_SUFFIXES:
         # Load as video
