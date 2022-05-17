@@ -14,15 +14,13 @@ from waternet.net import WaterNet
 
 wd = Path(__file__).parent.resolve()  # repo root
 outputdir = wd / "output"
-default_ckpt_dir_relative = "waternet-exported-state-dict.pt"
+default_ckpt_dir_relative = "waternet_exported_state_dict-daa0ee.pt"
 default_ckpt_dir_absolute = wd / default_ckpt_dir_relative
 VID_SUFFIXES = [".mp4", ".mpeg", ".avi"]
 IM_SUFFIXES = [".bmp", ".jpg", ".jpeg", ".png", ".gif"]
 
 # Dropbox URLs just need dl=1 to ensure direct download link
-default_ckpt_url = (
-    "https://www.dropbox.com/s/j8ida1d86hy5tm4/waternet-exported-state-dict.pt?dl=1"
-)
+default_ckpt_url = "https://www.dropbox.com/s/j8ida1d86hy5tm4/waternet_exported_state_dict-daa0ee.pt?dl=1"
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
@@ -98,6 +96,7 @@ if args.weights is None:
             progress=False,  # not a pbar but a percentage printout
             map_location=device,
             model_dir=wd,
+            check_hash=True,
         )
         # print(f"Pretrained weights saved to {weights_dir}") # Redundant
         model.load_state_dict(sd)

@@ -2,9 +2,7 @@ import numpy as np
 import torch
 
 dependencies = ["torch", "numpy"]
-default_ckpt_url = (
-    "https://www.dropbox.com/s/j8ida1d86hy5tm4/waternet-exported-state-dict.pt?dl=1"
-)
+default_ckpt_url = "https://www.dropbox.com/s/j8ida1d86hy5tm4/waternet_exported_state_dict-daa0ee.pt?dl=1"
 
 
 def arr2ten_noeinops(arr):
@@ -80,6 +78,7 @@ def waternet(pretrained=True, device=None):
         ckpt = torch.hub.load_state_dict_from_url(
             default_ckpt_url,
             progress=False,  # not a pbar but a percentage printout
+            check_hash=True,
         )
         model.load_state_dict(ckpt)
 
