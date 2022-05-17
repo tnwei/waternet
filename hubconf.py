@@ -32,12 +32,27 @@ def ten2arr_noeinops(ten):
     arr = np.clip(arr, 0, 1)
     arr = (arr * 255).astype(np.uint8)
     # arr = rearrange(arr, "n c h w -> n h w c")
-    arr = np.transpose(arr, (0, 3, 1, 2))
+    arr = np.transpose(arr, (0, 2, 3, 1))
     return arr
 
 
 def waternet(pretrained=True, device=None):
     """
+    Args
+    ----
+    pretrained: bool
+        Load pretrained weights. Defaults to True
+
+    device:
+        torch device. Defaults to None
+
+    Returns
+    -------
+    preprocess: Preprocessing function before inference
+    model: WaterNet model
+    postprocess: Postprocessing function after inference
+
+    Example usage:
     ```
     import torch
     import cv2
