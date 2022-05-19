@@ -193,6 +193,66 @@ for fdir in fdirs:
 
     elif fdir.suffix in VID_SUFFIXES:
         # Load as video
-        raise NotImplementedError("Video not implemented yet")
+        # Set up I/O
+        cap = cv2.VideoCapture(os.fspath(fdir))
+        frames_per_second = int(cap.get(cv2.CAP_PROP_FPS))
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        outpath = os.fspath(savedir / (fdir.stem + ".mp4"))
+
+        print(f"{frame_width=}, {frame_height=}")
+
+        # Savedir exists check as late as possible
+        # so early errors don't create empty savedirs
+        # Declaring this after init VideoWriter = no video saved!
+        if not savedir.exists():
+            savedir.mkdir()
+
+        codec = cv2.VideoWriter.fourcc(*"avc1")
+        video_writer = cv2.VideoWriter(
+            outpath, codec, frames_per_second, (frame_width, frame_height)
+        )
+        print(f"Working on {fdir.name} with {total_frames} frames")
+
+        frames = 0
+
+        while True:
+            retval, im = cap.read()
+
+            if retval is False:
+                break
+
+            # Preprocessing
+            im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+            wb, gc, he = transform(im)
+            rgb_ten = arr2ten(im)
+            wb_ten = arr2ten(wb)
+            gc_ten = arr2ten(gc)
+            he_ten = arr2ten(he)
+
+            # Inference + postprocessing
+            with torch.no_grad():
+                rgb_ten = rgb_ten.to(device)
+                wb_ten = wb_ten.to(device)
+                gc_ten = gc_ten.to(device)
+                he_ten = he_ten.to(device)
+
+                # torch.Size([1, 3, H, W])
+                out = model(rgb_ten, wb_ten, he_ten, gc_ten)
+                out_im = ten2arr(out)[0]
+                out_im = cv2.cvtColor(out_im, cv2.COLOR_RGB2BGR)
+
+            video_writer.write(out_im)
+            frames += 1
+
+            if frames % 50 == 0:
+                print(f"Processed {frames} frames")
+
+        cap.release()
+        video_writer.release()
+
+        cv2.destroyAllWindows()
+
 
 print(f"Saved output to {savedir}!")
