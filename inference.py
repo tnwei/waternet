@@ -20,9 +20,6 @@ IM_SUFFIXES = [".bmp", ".jpg", ".jpeg", ".png", ".gif"]
 # Dropbox URLs just need dl=1 to ensure direct download link
 default_ckpt_url = "https://www.dropbox.com/s/j8ida1d86hy5tm4/waternet_exported_state_dict-daa0ee.pt?dl=1"
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"Using device: {device}")
-
 # Util fxns ------
 
 
@@ -72,14 +69,21 @@ parser.add_argument(
 parser.add_argument(
     "--name", type=str, help="(Optional) Subfolder name to save under `./output`."
 )
+
+# this becomes `args.show_split`
 parser.add_argument(
-    "--show-split", action="store_true", default=False  # this becomes `args.show_split`
+    "--show-split",
+    action="store_true",
+    default=False,
+    help="(Optional) Left/right of output is original/processed. Adds before/after watermark.",
 )
 args = parser.parse_args()
 
 assert args.source is not None, "No input image/video specified in --source!"
 
 # Load weights ------
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Using device: {device}")
 
 model = WaterNet()
 model = model.to(device)
