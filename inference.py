@@ -5,8 +5,6 @@ import os
 import cv2
 import numpy as np
 import torch
-from einops import rearrange
-
 from waternet.data import transform
 from waternet.net import WaterNet
 
@@ -35,9 +33,12 @@ def arr2ten(arr):
     """
     ten = torch.from_numpy(arr) / 255
     if len(ten.shape) == 3:
-        ten = rearrange(ten, "h w c -> 1 c h w")
+        # ten = rearrange(ten, "h w c -> 1 c h w")
+        ten = torch.permute(ten, (2, 0, 1))
+        ten = torch.unsqueeze(ten, dim=0)
     elif len(ten.shape) == 4:
-        ten = rearrange(ten, "n h w c -> n c h w")
+        # ten = rearrange(ten, "n h w c -> n c h w")
+        ten = torch.permute(ten, (0, 3, 1, 2))
     return ten
 
 
@@ -49,7 +50,8 @@ def ten2arr(ten):
     arr = ten.cpu().detach().numpy()
     arr = np.clip(arr, 0, 1)
     arr = (arr * 255).astype(np.uint8)
-    arr = rearrange(arr, "n c h w -> n h w c")
+    # arr = rearrange(arr, "n c h w -> n h w c")
+    arr = np.transpose(arr, (0, 2, 3, 1))
     return arr
 
 
