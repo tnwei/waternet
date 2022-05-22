@@ -70,6 +70,9 @@ parser.add_argument(
 parser.add_argument(
     "--name", type=str, help="(Optional) Subfolder name to save under `./output`."
 )
+parser.add_argument(
+    "--show-split", action="store_true", default=False  # this becomes `args.show_split`
+)
 args = parser.parse_args()
 
 assert args.source is not None, "No input image/video specified in --source!"
@@ -157,16 +160,16 @@ else:
 for fdir in fdirs:
     if fdir.suffix in IM_SUFFIXES:
         # Load image
-        im = cv2.imread(os.fspath(fdir))  # OpenCV can't read pathlike-objects
+        bgr = cv2.imread(os.fspath(fdir))  # OpenCV can't read pathlike-objects
 
-        if len(im.shape) == 3:
-            im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-        elif len(im.shape) == 4:
-            im = cv2.cvtColor(im, cv2.COLOR_BGRA2RGB)
+        if len(bgr.shape) == 3:
+            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+        elif len(bgr.shape) == 4:
+            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGRA2RGB)
 
         # Preprocessing
-        wb, gc, he = transform(im)
-        rgb_ten = arr2ten(im)
+        wb, gc, he = transform(rgb)
+        rgb_ten = arr2ten(rgb)
         wb_ten = arr2ten(wb)
         gc_ten = arr2ten(gc)
         he_ten = arr2ten(he)
@@ -189,7 +192,39 @@ for fdir in fdirs:
         # so early errors don't create empty savedirs
         if not savedir.exists():
             savedir.mkdir()
-        cv2.imwrite(outpath, out_im)
+
+        if args.show_split is True:
+            composite_im = np.zeros_like(rgb)
+            w = int(out_im.shape[1] / 2)  # h, w, c
+            composite_im[:, :w, :] = bgr[:, :w, :]
+            composite_im[:, w:, :] = out_im[:, w:, :]
+
+            cv2.putText(
+                img=composite_im,
+                text=f"Before",
+                # location of bottom-left corner of text
+                org=(50, 50),  # W, H
+                # just pick sth not ugly
+                fontFace=cv2.FONT_HERSHEY_DUPLEX,
+                fontScale=1,  # multiplied by font base size
+                color=(255, 255, 255),
+                thickness=2,
+            )
+
+            cv2.putText(
+                img=composite_im,
+                text=f"After",
+                # location of bottom-left corner of text
+                org=(w + 50, 50),
+                # just pick sth not ugly
+                fontFace=cv2.FONT_HERSHEY_DUPLEX,
+                fontScale=1,  # multiplied by font base size
+                color=(255, 255, 255),
+                thickness=2,
+            )
+            cv2.imwrite(outpath, composite_im)
+        else:
+            cv2.imwrite(outpath, out_im)
 
     elif fdir.suffix in VID_SUFFIXES:
         # Load as video
@@ -218,15 +253,15 @@ for fdir in fdirs:
         frames = 0
 
         while True:
-            retval, im = cap.read()
+            retval, bgr = cap.read()
 
             if retval is False:
                 break
 
             # Preprocessing
-            im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-            wb, gc, he = transform(im)
-            rgb_ten = arr2ten(im)
+            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+            wb, gc, he = transform(rgb)
+            rgb_ten = arr2ten(rgb)
             wb_ten = arr2ten(wb)
             gc_ten = arr2ten(gc)
             he_ten = arr2ten(he)
@@ -243,7 +278,39 @@ for fdir in fdirs:
                 out_im = ten2arr(out)[0]
                 out_im = cv2.cvtColor(out_im, cv2.COLOR_RGB2BGR)
 
-            video_writer.write(out_im)
+            if args.show_split is True:
+                composite_im = np.zeros_like(bgr)
+                w = int(out_im.shape[1] / 2)  # h, w, c
+                composite_im[:, :w, :] = bgr[:, :w, :]
+                composite_im[:, w:, :] = out_im[:, w:, :]
+
+                cv2.putText(
+                    img=composite_im,
+                    text=f"Before",
+                    # location of bottom-left corner of text
+                    org=(50, 50),  # W, H
+                    # just pick sth not ugly
+                    fontFace=cv2.FONT_HERSHEY_DUPLEX,
+                    fontScale=1,  # multiplied by font base size
+                    color=(255, 255, 255),
+                    thickness=2,
+                )
+
+                cv2.putText(
+                    img=composite_im,
+                    text=f"After",
+                    # location of bottom-left corner of text
+                    org=(w + 50, 50),
+                    # just pick sth not ugly
+                    fontFace=cv2.FONT_HERSHEY_DUPLEX,
+                    fontScale=1,  # multiplied by font base size
+                    color=(255, 255, 255),
+                    thickness=2,
+                )
+                video_writer.write(composite_im)
+            else:
+                video_writer.write(out_im)
+
             frames += 1
 
             if frames % 50 == 0:
