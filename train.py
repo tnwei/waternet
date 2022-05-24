@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 # Config section ------
 # TODO: Replace with OmegaConf for flexibility?
-num_epochs = 400
+num_epochs = 40  # 400
 batch_size = 16
 im_height = 112
 im_width = 112
@@ -25,6 +25,7 @@ def eval_one_epoch(model, val_dataloader, device):
     model.eval()
     epoch_metrics = {"mse": 0}
     minibatches_per_epoch = len(val_dataloader)
+    # TODO: add prefix for epoch num
     pbar = tqdm(
         enumerate(val_dataloader),
         total=minibatches_per_epoch,
@@ -51,7 +52,7 @@ def eval_one_epoch(model, val_dataloader, device):
     epoch_metrics = {i: j / minibatches_per_epoch for i, j in epoch_metrics.items()}
 
     # Print epoch metrics
-    print(f"MSE: {epoch_metrics['loss']:.2f}")
+    print(f"MSE: {epoch_metrics['mse']:.3g}")
 
     model.train()
     return epoch_metrics
@@ -136,13 +137,13 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
 
     model = WaterNet()
-    model = model.to(device)
 
     # TODO: Load weights if available
     if checkpoint_dir is not None:
         with open(checkpoint_dir, "rb") as f:
             model.load_state_dict(torch.load(f, map_location=device))
 
+    model.to(device)
     model.train()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -161,6 +162,7 @@ if __name__ == "__main__":
             return self.model(x)
 
     vgg_model = PerceptualModel()
+    vgg_model.to(device)
     vgg_model.eval()
 
     # Actual training loop ------

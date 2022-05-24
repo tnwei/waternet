@@ -9,7 +9,7 @@ dependencies:
   #- nvidia::cudatoolkit=11.1
   - pytorch::pytorch
   - pytorch::torchvision
-  - nvidia::cudatoolkit
+  - nvidia::cudatoolkit=11.3 # ref to pytorch.org
   #
   - numpy
   - opencv
