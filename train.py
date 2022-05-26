@@ -8,11 +8,13 @@ from waternet.net import WaterNet
 from waternet.training_utils import UIEBDataset
 from tqdm import tqdm
 
+from timeit import default_timer as timer
+
 # Training packages: tqdm, albumentations
 
 # Config section ------
 # TODO: Replace with OmegaConf for flexibility?
-num_epochs = 40  # 400
+num_epochs = 400
 batch_size = 16
 im_height = 112
 im_width = 112
@@ -30,7 +32,8 @@ def eval_one_epoch(model, val_dataloader, device):
         enumerate(val_dataloader),
         total=minibatches_per_epoch,
         ascii=True,
-        bar_format="{l_bar}{bar:10}{r_bar}",
+        desc="Validation",
+        bar_format="{l_bar}{bar:20}{r_bar}",
     )
 
     with torch.no_grad():
@@ -39,34 +42,43 @@ def eval_one_epoch(model, val_dataloader, device):
             wb_ten = next_data["wb"].to(device)
             he_ten = next_data["he"].to(device)
             gc_ten = next_data["gc"].to(device)
-            ref_ten = next_data["raw"].to(device)
+            ref_ten = next_data["ref"].to(device)
 
             # Forward prop
             out = model(rgb_ten, wb_ten, he_ten, gc_ten)
 
             # Evaluate and record metrics
             # TODO: Add the other scoring fxns
-            epoch_metrics["mse"] += torch.mean(torch.square(out - ref_ten)).item()
+            epoch_metrics["mse"] += torch.mean(
+                torch.square(255 * (out - ref_ten))
+            ).item()
 
     # Update epoch metrics
     epoch_metrics = {i: j / minibatches_per_epoch for i, j in epoch_metrics.items()}
-
-    # Print epoch metrics
-    print(f"MSE: {epoch_metrics['mse']:.3g}")
 
     model.train()
     return epoch_metrics
 
 
-def train_one_epoch(model, train_dataloader, optimizer, scheduler, vgg_model, device):
+def train_one_epoch(
+    model,
+    train_dataloader,
+    optimizer,
+    scheduler,
+    vgg_model,
+    device,
+    epoch_num,
+    total_epochs,
+):
     model.train()
-    epoch_metrics = {"loss": 0}
+    epoch_metrics = {"loss": 0, "perceptual_loss": 0, "mse_loss": 0}
     minibatches_per_epoch = len(train_dataloader)
     pbar = tqdm(
         enumerate(train_dataloader),
         total=minibatches_per_epoch,
         ascii=True,
-        bar_format="{l_bar}{bar:10}{r_bar}",
+        desc=f"Epoch {epoch_num+1}/{total_epochs}",
+        bar_format="{l_bar}{bar:20}{r_bar}",
     )
 
     for idx, next_data in pbar:
@@ -74,7 +86,7 @@ def train_one_epoch(model, train_dataloader, optimizer, scheduler, vgg_model, de
         wb_ten = next_data["wb"].to(device)
         he_ten = next_data["he"].to(device)
         gc_ten = next_data["gc"].to(device)
-        ref_ten = next_data["raw"].to(device)
+        ref_ten = next_data["ref"].to(device)
 
         # Forward prop
         out = model(rgb_ten, wb_ten, he_ten, gc_ten)
@@ -88,15 +100,15 @@ def train_one_epoch(model, train_dataloader, optimizer, scheduler, vgg_model, de
         )
         # size is torch.Size([1, 512, M, N]), where M, N = H/16, W/16
         perceptual_dist = torch.square(
-            vgg_model(imagenet_normalized_x) - vgg_model(imagenet_normalized_y)
+            255 * (vgg_model(imagenet_normalized_x) - vgg_model(imagenet_normalized_y))
         )
         perceptual_loss = torch.mean(perceptual_dist)
 
         # MSE loss
-        mse_loss = torch.mean(torch.square(out - ref_ten))
+        mse_loss = torch.mean(torch.square(255 * (out - ref_ten)))
 
         # Composite loss
-        loss = 0.05 * perceptual_loss + mse_loss
+        loss = (0.05 * perceptual_loss) + mse_loss
 
         # Backprop
         optimizer.zero_grad()
@@ -107,6 +119,8 @@ def train_one_epoch(model, train_dataloader, optimizer, scheduler, vgg_model, de
         # Evaluate and record metrics
         # TODO: Add the other scoring fxns
         epoch_metrics["loss"] += loss.item()
+        epoch_metrics["perceptual_loss"] += perceptual_loss.item()
+        epoch_metrics["mse_loss"] += mse_loss.item()
 
         # Update progress bar
         if (idx % 10 == 0) and (idx != 0):
@@ -118,6 +132,7 @@ def train_one_epoch(model, train_dataloader, optimizer, scheduler, vgg_model, de
 
 
 if __name__ == "__main__":
+    start_ts = timer()
     # TODO: separate legacy mode for replicating the paper, and the up-to-date implementation
     projectroot = Path(__file__).parent
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -167,10 +182,22 @@ if __name__ == "__main__":
 
     # Actual training loop ------
     for i in range(num_epochs):
-        train_one_epoch(
-            model, train_dataloader, optimizer, scheduler, vgg_model, device
+        train_metrics = train_one_epoch(
+            model,
+            train_dataloader,
+            optimizer,
+            scheduler,
+            vgg_model,
+            device,
+            epoch_num=i,
+            total_epochs=num_epochs,
         )
-        eval_one_epoch(model, val_dataloader, device)  # will print epoch metrics
+        print("   ".join([f"{i}: {j:.3g}" for i, j in train_metrics.items()]))
+
+        eval_metrics = eval_one_epoch(model, val_dataloader, device)
+        print("   ".join([f"{i}: {j:.3g}" for i, j in eval_metrics.items()]))
 
         # TODO
         torch.save(model.state_dict(), "last.pt")
+
+    print(f"Total time: {timer()-start_ts}s")
