@@ -7,6 +7,11 @@ from waternet.data import transform
 from waternet.net import WaterNet
 from waternet.training_utils import UIEBDataset
 from tqdm import tqdm
+from torchmetrics.functional import (
+    structural_similarity_index_measure,
+    peak_signal_noise_ratio,
+)
+import numpy as np
 
 from timeit import default_timer as timer
 
@@ -19,15 +24,16 @@ batch_size = 16
 im_height = 112
 im_width = 112
 checkpoint_dir = None
+train_metrics_names = ["mse", "ssim", "psnr", "perceptual_loss", "loss"]
+val_metrics_names = ["mse", "ssim", "psnr", "perceptual_loss"]
 
 # Main train and eval fxns ------
 
 
 def eval_one_epoch(model, val_dataloader, device):
     model.eval()
-    epoch_metrics = {"mse": 0}
+    epoch_metrics = {i: 0 for i in val_metrics_names}
     minibatches_per_epoch = len(val_dataloader)
-    # TODO: add prefix for epoch num
     pbar = tqdm(
         enumerate(val_dataloader),
         total=minibatches_per_epoch,
@@ -47,11 +53,29 @@ def eval_one_epoch(model, val_dataloader, device):
             # Forward prop
             out = model(rgb_ten, wb_ten, he_ten, gc_ten)
 
+            # Perceptual loss calculation
+            imagenet_normalized_x = TF.normalize(
+                out, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+            )
+            imagenet_normalized_y = TF.normalize(
+                ref_ten, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+            )
+            # size is torch.Size([1, 512, M, N]), where M, N = H/16, W/16
+            perceptual_dist = torch.square(
+                255
+                * (vgg_model(imagenet_normalized_x) - vgg_model(imagenet_normalized_y))
+            )
+            perceptual_loss = torch.mean(perceptual_dist)
+
             # Evaluate and record metrics
-            # TODO: Add the other scoring fxns
             epoch_metrics["mse"] += torch.mean(
                 torch.square(255 * (out - ref_ten))
             ).item()
+            ssim = structural_similarity_index_measure(preds=out, target=ref_ten)
+            psnr = peak_signal_noise_ratio(preds=out, target=ref_ten, data_range=1 - 0)
+            epoch_metrics["ssim"] += ssim.item()
+            epoch_metrics["psnr"] += psnr.item()
+            epoch_metrics["perceptual_loss"] = perceptual_loss
 
     # Update epoch metrics
     epoch_metrics = {i: j / minibatches_per_epoch for i, j in epoch_metrics.items()}
@@ -71,7 +95,7 @@ def train_one_epoch(
     total_epochs,
 ):
     model.train()
-    epoch_metrics = {"loss": 0, "perceptual_loss": 0, "mse_loss": 0}
+    epoch_metrics = {i: 0 for i in train_metrics_names}
     minibatches_per_epoch = len(train_dataloader)
     pbar = tqdm(
         enumerate(train_dataloader),
@@ -80,7 +104,6 @@ def train_one_epoch(
         desc=f"Epoch {epoch_num+1}/{total_epochs}",
         bar_format="{l_bar}{bar:20}{r_bar}",
     )
-
     for idx, next_data in pbar:
         rgb_ten = next_data["raw"].to(device)
         wb_ten = next_data["wb"].to(device)
@@ -105,10 +128,10 @@ def train_one_epoch(
         perceptual_loss = torch.mean(perceptual_dist)
 
         # MSE loss
-        mse_loss = torch.mean(torch.square(255 * (out - ref_ten)))
+        mse = torch.mean(torch.square(255 * (out - ref_ten)))
 
         # Composite loss
-        loss = (0.05 * perceptual_loss) + mse_loss
+        loss = (0.05 * perceptual_loss) + mse
 
         # Backprop
         optimizer.zero_grad()
@@ -117,10 +140,15 @@ def train_one_epoch(
         scheduler.step()
 
         # Evaluate and record metrics
-        # TODO: Add the other scoring fxns
         epoch_metrics["loss"] += loss.item()
         epoch_metrics["perceptual_loss"] += perceptual_loss.item()
-        epoch_metrics["mse_loss"] += mse_loss.item()
+        epoch_metrics["mse"] += mse.item()
+
+        with torch.no_grad():
+            ssim = structural_similarity_index_measure(preds=out, target=ref_ten)
+            psnr = peak_signal_noise_ratio(preds=out, target=ref_ten, data_range=1 - 0)
+            epoch_metrics["ssim"] += ssim.item()
+            epoch_metrics["psnr"] += psnr.item()
 
         # Update progress bar
         if (idx % 10 == 0) and (idx != 0):
@@ -153,7 +181,6 @@ if __name__ == "__main__":
 
     model = WaterNet()
 
-    # TODO: Load weights if available
     if checkpoint_dir is not None:
         with open(checkpoint_dir, "rb") as f:
             model.load_state_dict(torch.load(f, map_location=device))
@@ -181,6 +208,9 @@ if __name__ == "__main__":
     vgg_model.eval()
 
     # Actual training loop ------
+    saved_train_metrics = {i: [] for i in train_metrics_names}
+    saved_val_metrics = {i: [] for i in val_metrics_names}
+
     for i in range(num_epochs):
         train_metrics = train_one_epoch(
             model,
@@ -192,12 +222,53 @@ if __name__ == "__main__":
             epoch_num=i,
             total_epochs=num_epochs,
         )
-        print("   ".join([f"{i}: {j:.3g}" for i, j in train_metrics.items()]))
 
         eval_metrics = eval_one_epoch(model, val_dataloader, device)
-        print("   ".join([f"{i}: {j:.3g}" for i, j in eval_metrics.items()]))
 
-        # TODO
+        print(
+            "    Train ||",
+            "   ".join([f"{i}: {j:.03g}" for i, j in train_metrics.items()]),
+        )
+        print(
+            "    Val   ||",
+            "   ".join([f"{i}: {j:.03g}" for i, j in eval_metrics.items()]),
+        )
+        print()
+
+        for i, j in train_metrics.items():
+            saved_train_metrics[i].append(j)
+
+        for i, j in eval_metrics.items():
+            saved_val_metrics[i].append(j)
+
+        # TODO: Save checkpoints and outcome properly? Say dedicated `training` folder
+        # Stores best weights and logged metrics
         torch.save(model.state_dict(), "last.pt")
+
+    # Save train metrics
+    train_metrics_arr = np.concatenate(
+        [np.array(saved_train_metrics[i]).reshape(-1, 1) for i in train_metrics_names],
+        axis=1,
+    )
+    val_metrics_arr = np.concatenate(
+        [np.array(saved_val_metrics[i]).reshape(-1, 1) for i in val_metrics_names],
+        axis=1,
+    )
+
+    np.savetxt(
+        "metrics-train.csv",
+        train_metrics_arr,
+        fmt="%f",
+        delimiter=",",
+        header=",".join(train_metrics_names),
+    )
+    np.savetxt(
+        "metrics-val.csv",
+        val_metrics_arr,
+        fmt="%f",
+        delimiter=",",
+        header=",".join(val_metrics_names),
+    )
+    print("Metrics saved to metrics-train.csv, metrics-val.csv")
 
     print(f"Total time: {timer()-start_ts}s")
