@@ -4,6 +4,8 @@ import cv2
 from pathlib import Path
 import os
 from .data import transform as preprocess_transform
+from typing import Optional
+import numpy as np
 
 
 def arr2ten(arr):
@@ -44,7 +46,14 @@ def ten2arr(ten):
 class UIEBDataset(torch.utils.data.Dataset):
     """UIEBDataset."""
 
-    def __init__(self, raw_dir, ref_dir, legacy=True, transform=None):
+    def __init__(
+        self,
+        raw_dir,
+        ref_dir,
+        im_height: Optional[int] = None,
+        im_width: Optional[int] = None,
+        transform=None,
+    ):
         """
         legacy=True to replicate the paper's parameters
         """
@@ -56,6 +65,10 @@ class UIEBDataset(torch.utils.data.Dataset):
         if transform is not None:
             self.transform = transform
         else:
+            # No legacy augmentations
+            # Paper uses flipping and rotation transforms to obtain 7 augmented versions of data
+            # Rotate by 90, 180, 270 degs, hflip, vflip? Not very clear
+            # This is as close as it gets without having to go out of my way to reproduce exactly 7 augmented versions
             self.transform = A.Compose(
                 [
                     A.HorizontalFlip(p=0.5),
@@ -64,14 +77,11 @@ class UIEBDataset(torch.utils.data.Dataset):
                 ]
             )
 
-        self.legacy_transform = A.Compose(
-            [A.HorizontalFlip(p=0.5), A.VerticalFlip(p=0.5), A.RandomRotate90(p=0.5)]
-        )
-
         self.raw_dir = Path(raw_dir)
         self.ref_dir = Path(ref_dir)
         self.im_fns = raw_im_fns
-        self.legacy = legacy
+        self.im_height = im_height
+        self.im_width = im_width
 
     def __len__(self):
         return len(self.im_fns)
@@ -81,12 +91,12 @@ class UIEBDataset(torch.utils.data.Dataset):
         raw_im = cv2.imread(os.fspath(self.raw_dir / self.im_fns[idx]))
         ref_im = cv2.imread(os.fspath(self.ref_dir / self.im_fns[idx]))
 
-        if self.legacy is True:
-            # Resize to 112x112
-            raw_im = cv2.resize(raw_im, (112, 112))
-            ref_im = cv2.resize(ref_im, (112, 112))
+        if (self.im_width is not None) and (self.im_height is not None):
+            # Resize accordingly
+            raw_im = cv2.resize(raw_im, (self.im_width, self.im_height))
+            ref_im = cv2.resize(ref_im, (self.im_width, self.im_height))
         else:
-            # Resize image if required, VGG requires mult of 32
+            # Else resize image to be mult of VGG, required by VGG
             im_w, im_h = raw_im.shape[0], raw_im.shape[1]
             vgg_im_w, vgg_im_h = int(im_w / 32) * 32, int(im_h / 32) * 32
             raw_im = cv2.resize(raw_im, (vgg_im_w, vgg_im_h))
@@ -96,17 +106,8 @@ class UIEBDataset(torch.utils.data.Dataset):
         raw_im = cv2.cvtColor(raw_im, cv2.COLOR_BGR2RGB)
         ref_im = cv2.cvtColor(ref_im, cv2.COLOR_BGR2RGB)
 
-        # No legacy augmentations
-        # Paper uses flipping and rotation transforms to obtain 7 augmented versions of data
-        # Rotate by 90, 180, 270 degs, hflip, vflip? Not very clear
-        # This is as close as it gets without having to go out of my way to reproduce exactly 7 augmented versions
-        if self.legacy is True:
-            transform = self.legacy_transform
-        else:
-            transform = self.transform
-
-        if transform is not None:
-            transformed = transform(image=raw_im, mask=ref_im)
+        if self.transform is not None:
+            transformed = self.transform(image=raw_im, mask=ref_im)
             raw_im, ref_im = transformed["image"], transformed["mask"]
         else:
             pass

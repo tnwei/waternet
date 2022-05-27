@@ -20,8 +20,8 @@ from timeit import default_timer as timer
 # TODO: Replace with OmegaConf for flexibility?
 num_epochs = 400
 batch_size = 16
-im_height = 112
-im_width = 112
+im_height = 112  # use None for native res
+im_width = 112  # use None for native res
 checkpoint_dir = None
 TRAIN_METRICS_NAMES = ["mse", "ssim", "psnr", "perceptual_loss", "loss"]
 VAL_METRICS_NAMES = ["mse", "ssim", "psnr", "perceptual_loss"]
@@ -187,7 +187,10 @@ if __name__ == "__main__":
     # TODO: Abstract away in yaml file? Similar to yolov5 so can swap in other datasets
     # TODO: Pre-split the UIEB dataset
     dataset = UIEBDataset(
-        projectroot / "data/raw-890", projectroot / "data/reference-890", legacy=True
+        projectroot / "data/raw-890",
+        projectroot / "data/reference-890",
+        im_height=im_height,
+        im_width=im_width,
     )
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [800, 90])
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size)
