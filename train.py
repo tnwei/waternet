@@ -3,7 +3,6 @@ import torchvision
 import torch.nn as nn
 import torchvision.transforms.functional as TF
 from pathlib import Path
-from waternet.data import transform
 from waternet.net import WaterNet
 from waternet.training_utils import UIEBDataset
 from tqdm import tqdm
@@ -15,7 +14,7 @@ import numpy as np
 
 from timeit import default_timer as timer
 
-# Training packages: tqdm, albumentations
+# Training packages: tqdm, albumentations, torchmetrics
 
 # Config section ------
 # TODO: Replace with OmegaConf for flexibility?
@@ -24,15 +23,15 @@ batch_size = 16
 im_height = 112
 im_width = 112
 checkpoint_dir = None
-train_metrics_names = ["mse", "ssim", "psnr", "perceptual_loss", "loss"]
-val_metrics_names = ["mse", "ssim", "psnr", "perceptual_loss"]
+TRAIN_METRICS_NAMES = ["mse", "ssim", "psnr", "perceptual_loss", "loss"]
+VAL_METRICS_NAMES = ["mse", "ssim", "psnr", "perceptual_loss"]
 
 # Main train and eval fxns ------
 
 
 def eval_one_epoch(model, val_dataloader, device):
     model.eval()
-    epoch_metrics = {i: 0 for i in val_metrics_names}
+    epoch_metrics = {i: 0 for i in VAL_METRICS_NAMES}
     minibatches_per_epoch = len(val_dataloader)
     pbar = tqdm(
         enumerate(val_dataloader),
@@ -75,7 +74,7 @@ def eval_one_epoch(model, val_dataloader, device):
             psnr = peak_signal_noise_ratio(preds=out, target=ref_ten, data_range=1 - 0)
             epoch_metrics["ssim"] += ssim.item()
             epoch_metrics["psnr"] += psnr.item()
-            epoch_metrics["perceptual_loss"] = perceptual_loss
+            epoch_metrics["perceptual_loss"] = perceptual_loss.item()
 
     # Update epoch metrics
     epoch_metrics = {i: j / minibatches_per_epoch for i, j in epoch_metrics.items()}
@@ -95,7 +94,7 @@ def train_one_epoch(
     total_epochs,
 ):
     model.train()
-    epoch_metrics = {i: 0 for i in train_metrics_names}
+    epoch_metrics = {i: 0 for i in TRAIN_METRICS_NAMES}
     minibatches_per_epoch = len(train_dataloader)
     pbar = tqdm(
         enumerate(train_dataloader),
@@ -164,6 +163,25 @@ if __name__ == "__main__":
     # TODO: separate legacy mode for replicating the paper, and the up-to-date implementation
     projectroot = Path(__file__).parent
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    outputdir = projectroot / "training"
+
+    # Create outputdir if not exists
+    if not outputdir.exists():
+        outputdir.mkdir()
+
+    # Determine savedir
+    numerical_subdirs = list(outputdir.glob("*"))
+
+    # isdecimal over isdigit and isnumeric
+    # see: https://datagy.io/python-isdigit/
+    numerical_subdirs = [
+        int(i.stem) for i in numerical_subdirs if (i.is_dir() and i.stem.isdecimal())
+    ]
+
+    if len(numerical_subdirs) == 0:
+        savedir = outputdir / "0"
+    else:
+        savedir = outputdir / str(max(numerical_subdirs) + 1)
 
     # Data loading section ------
     # TODO: Abstract away in yaml file? Similar to yolov5 so can swap in other datasets
@@ -208,8 +226,8 @@ if __name__ == "__main__":
     vgg_model.eval()
 
     # Actual training loop ------
-    saved_train_metrics = {i: [] for i in train_metrics_names}
-    saved_val_metrics = {i: [] for i in val_metrics_names}
+    saved_train_metrics = {i: [] for i in TRAIN_METRICS_NAMES}
+    saved_val_metrics = {i: [] for i in VAL_METRICS_NAMES}
 
     for i in range(num_epochs):
         train_metrics = train_one_epoch(
@@ -241,34 +259,42 @@ if __name__ == "__main__":
         for i, j in eval_metrics.items():
             saved_val_metrics[i].append(j)
 
+        # Savedir exists check as late as possible
+        # so early errors don't create empty savedirs
+        if not savedir.exists():
+            savedir.mkdir()
+
         # TODO: Save checkpoints and outcome properly? Say dedicated `training` folder
         # Stores best weights and logged metrics
-        torch.save(model.state_dict(), "last.pt")
+
+        torch.save(model.state_dict(), savedir / "last.pt")
 
     # Save train metrics
     train_metrics_arr = np.concatenate(
-        [np.array(saved_train_metrics[i]).reshape(-1, 1) for i in train_metrics_names],
+        [np.array(saved_train_metrics[i]).reshape(-1, 1) for i in TRAIN_METRICS_NAMES],
         axis=1,
     )
     val_metrics_arr = np.concatenate(
-        [np.array(saved_val_metrics[i]).reshape(-1, 1) for i in val_metrics_names],
+        [np.array(saved_val_metrics[i]).reshape(-1, 1) for i in VAL_METRICS_NAMES],
         axis=1,
     )
 
     np.savetxt(
-        "metrics-train.csv",
+        savedir / "metrics-train.csv",
         train_metrics_arr,
         fmt="%f",
         delimiter=",",
-        header=",".join(train_metrics_names),
+        comments="",
+        header=",".join(TRAIN_METRICS_NAMES),
     )
     np.savetxt(
-        "metrics-val.csv",
+        savedir / "metrics-val.csv",
         val_metrics_arr,
         fmt="%f",
         delimiter=",",
-        header=",".join(val_metrics_names),
+        comments="",
+        header=",".join(VAL_METRICS_NAMES),
     )
-    print("Metrics saved to metrics-train.csv, metrics-val.csv")
+    print(f"Metrics and weights saved to {savedir}")
 
     print(f"Total time: {timer()-start_ts}s")
