@@ -12,17 +12,11 @@ from torchmetrics.functional import (
 )
 import numpy as np
 
+import argparse
 from timeit import default_timer as timer
 
 # Training packages: tqdm, albumentations, torchmetrics
 
-# Config section ------
-# TODO: Replace with OmegaConf for flexibility?
-num_epochs = 400
-batch_size = 16
-im_height = 112  # use None for native res
-im_width = 112  # use None for native res
-checkpoint_dir = None
 TRAIN_METRICS_NAMES = ["mse", "ssim", "psnr", "perceptual_loss", "loss"]
 VAL_METRICS_NAMES = ["mse", "ssim", "psnr", "perceptual_loss"]
 
@@ -164,6 +158,41 @@ if __name__ == "__main__":
     projectroot = Path(__file__).parent
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     outputdir = projectroot / "training"
+
+    # Config section ------
+    # TODO: Replace with OmegaConf for flexibility?
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--epochs", type=int, default=400, help="(Optional) Num epochs, defaults to 400"
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=16,
+        help="(Optional) Batch size, defaults to 16",
+    )
+    parser.add_argument(
+        "--height",
+        type=int,
+        default=112,
+        help="(Optional) Image height, defaults to 112",
+    )
+    parser.add_argument(
+        "--width", type=int, default=112, help="(Optional) Image width, defaults to 112"
+    )
+    parser.add_argument(
+        # Default not specified, so that this argument is blank if unspecified
+        "--weights",
+        type=str,
+        help=f"(Optional) Starting weights for training",
+    )
+    args = parser.parse_args()
+
+    num_epochs = args.epochs
+    batch_size = args.batch_size
+    im_height = args.height  # use None for native res
+    im_width = args.width  # use None for native res
+    checkpoint_dir = args.weights
 
     # Create outputdir if not exists
     if not outputdir.exists():
