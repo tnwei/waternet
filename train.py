@@ -11,8 +11,8 @@ from torchmetrics.functional import (
     peak_signal_noise_ratio,
 )
 import numpy as np
-
 import argparse
+import json
 from timeit import default_timer as timer
 
 # Training packages: tqdm, albumentations, torchmetrics
@@ -324,6 +324,20 @@ if __name__ == "__main__":
         comments="",
         header=",".join(VAL_METRICS_NAMES),
     )
+
+    with open(savedir / "config.json", "w") as f:
+        json.dump(
+            {
+                "epochs": num_epochs,
+                "batch_size": batch_size,
+                "im_height": im_height,
+                "im_width": im_width,
+                "weights": checkpoint_dir,
+            },
+            f,
+            indent=4,
+        )
+
     print(f"Metrics and weights saved to {savedir}")
 
     print(f"Total time: {timer()-start_ts}s")
