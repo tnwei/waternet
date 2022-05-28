@@ -157,6 +157,7 @@ if __name__ == "__main__":
     projectroot = Path(__file__).parent
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     outputdir = projectroot / "training"
+    torch.manual_seed(0)
 
     # Config section ------
     parser = argparse.ArgumentParser()
