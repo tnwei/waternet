@@ -154,13 +154,11 @@ def train_one_epoch(
 
 if __name__ == "__main__":
     start_ts = timer()
-    # TODO: separate legacy mode for replicating the paper, and the up-to-date implementation
     projectroot = Path(__file__).parent
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     outputdir = projectroot / "training"
 
     # Config section ------
-    # TODO: Replace with OmegaConf for flexibility?
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--epochs", type=int, default=400, help="(Optional) Num epochs, defaults to 400"
@@ -186,13 +184,22 @@ if __name__ == "__main__":
         type=str,
         help=f"(Optional) Starting weights for training",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="(Optional) Seed to pass to `torch.random_seed()` for reproducibility, defaults to None i.e. random",
+    )
     args = parser.parse_args()
 
     num_epochs = args.epochs
     batch_size = args.batch_size
-    im_height = args.height  # use None for native res
-    im_width = args.width  # use None for native res
+    im_height = args.height
+    im_width = args.width
     checkpoint_dir = args.weights
+
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
 
     # Create outputdir if not exists
     if not outputdir.exists():
@@ -215,6 +222,7 @@ if __name__ == "__main__":
     # Data loading section ------
     # TODO: Abstract away in yaml file? Similar to yolov5 so can swap in other datasets
     # TODO: Pre-split the UIEB dataset
+    # Same split everytime using `torch.random_seed()`
     dataset = UIEBDataset(
         projectroot / "data/raw-890",
         projectroot / "data/reference-890",
@@ -257,7 +265,7 @@ if __name__ == "__main__":
     vgg_model.to(device)
     vgg_model.eval()
 
-    # Actual training loop ------
+    # Main training loop ------
     saved_train_metrics = {i: [] for i in TRAIN_METRICS_NAMES}
     saved_val_metrics = {i: [] for i in VAL_METRICS_NAMES}
 
