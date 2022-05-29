@@ -10,7 +10,7 @@ _Source data: [A Surprise Diving Encounter with a Giant Humpback Whale, YouTube]
 
 ## Usage in commandline
 
-Git clone this repo, then do either `pip install -r requirements.txt` or `conda env create -f env.yaml`. 
+Git clone this repo, then do either `pip install -r requirements.txt` or `conda env create -f env.yaml`. Download weights from the training replication results section if needed.
 
 Use `inference.py`: 
 
@@ -135,17 +135,18 @@ Here's what I've done in this repo:
 - Reimplemented the network in Pytorch, converted the original pretrained weights.
 - Replaced MATLAB image transforms in Python. The original repo later added image transforms in Python, but they are not equivalent to the original MATLAB implementation. Gamma correction and white balance correction logic are reimplemented as-is. Histogram equalization however relied on MATLAB's built-in `adapthisteq` function, and thus can't be reimplemented faithfully. Ended up using OpenCV's implementation of contrast-limited adaptive histogram equalization. Testing revealed that both implementations are close but not equivalent. 
 - Training and inferencing CLI.
+- Training replication (see below)
 
 ## Training replication results
 
-Using dataset split with random seed 0:
+Using dataset split with random seed 0 (replicated weights shared via Dropbox):
 
-| Method | MSE  (x1e3) ↓↑ | PSNR (dB) ↑ | SSIM  ↑ |
+| Method | MSE  (x1e3) ↓ | PSNR (dB) ↑ | SSIM  ↑ |
 | ------ | -------------- | ----------- | ------- |
-| Original WaterNet (in paper) | 0.7976 | 19.1130 | 0.7971
-| Original WaterNet (this repo) | 0.6260 | 20.3766 | 0.8415 |
-| Replicated WaterNet (this repo) | X | X | X |
-| Replicated WaterNet 256x256 (this repo) | X | X | X |
+| Original WaterNet weights, from paper | 0.7976 | 19.1130 | 0.7971
+| Original WaterNet weights, scored in this repo | 0.6260 | 20.3766 | 0.8415 |
+| Replicated WaterNet, 400 epochs / [link to weights](https://www.dropbox.com/s/0nzt1jowxavbkwa/replicated-waternet-20220528.pt?dl=0) | 0.4674 | 21.7300 | 0.9183 |
+| **Replicated WaterNet, 400 epochs @ 256x256** / [link to weights](https://www.dropbox.com/s/g3ttnbjgi1pjp0v/replicated-waternet-256x256-20220529.pt?dl=0) | **0.4574** | **21.7964** | **0.9195** |
 ------------------
 
 *Project based on the [cookiecutter-datascience-lite](https://github.com/tnwei/cookiecutter-datascience-lite/) template.*
