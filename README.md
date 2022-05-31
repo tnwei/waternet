@@ -2,6 +2,8 @@
 
 Modern replication of WaterNet in Pytorch from "An Underwater Image Enhancement Benchmark Dataset and Beyond", IEEE TIP 2019. 
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/tnwei/waternet/blob/main/colab-example-waternet.ipynb)
+
 ![](docs/frames-0968-small.jpeg)
 
 ![](docs/173-small.jpeg)
