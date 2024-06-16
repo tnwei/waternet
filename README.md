@@ -10,6 +10,8 @@ Modern replication of WaterNet in Pytorch from "An Underwater Image Enhancement 
 
 _Source data: [A Surprise Diving Encounter with a Giant Humpback Whale, YouTube](https://www.youtube.com/watch?v=vAZkzV41sCc)_
 
+Update 2 years later: For the messy experimental code used to perform this replication, see the [dev branch](https://github.com/tnwei/waternet/tree/dev)
+
 ## Usage in commandline
 
 Git clone this repo, then do either `pip install -r requirements.txt` or `conda env create -f env.yaml`. Download weights from the training replication results section if needed.
@@ -60,8 +62,6 @@ rgb_ten, wb_ten, he_ten, gc_ten = preprocess(rgb_im)
 out_ten = model(rgb_ten, wb_ten, he_ten, gc_ten)
 out_im = postprocess(out_ten)
 ```
-
-<!-- TODO: Training on higher res images -->
 
 ## Training
 
@@ -149,6 +149,11 @@ Using dataset split with random seed 0 (replicated weights shared via Dropbox):
 | Original WaterNet weights, scored in this repo | 0.6260 | 20.3766 | 0.8415 |
 | Replicated WaterNet, 400 epochs / [link to weights](https://www.dropbox.com/s/0nzt1jowxavbkwa/replicated-waternet-20220528.pt?dl=0) | 0.4674 | 21.7300 | 0.9183 |
 | **Replicated WaterNet, 400 epochs @ 256x256** / [link to weights](https://www.dropbox.com/s/g3ttnbjgi1pjp0v/replicated-waternet-256x256-20220529.pt?dl=0) | **0.4574** | **21.7964** | **0.9195** |
+
+## Acknowledgements
+
+Plumbing for structuring model training and inferencing inspired by [ultralytics/yolov5](https://github.com/ultralytics/yolov5/)
+
 ------------------
 
 *Project based on the [cookiecutter-datascience-lite](https://github.com/tnwei/cookiecutter-datascience-lite/) template.*
